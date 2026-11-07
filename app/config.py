@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     default_lon: float = 18.95
     min_elevation_deg: float = 10.0
     log_level: str = "INFO"
+    allowed_users: str = ""  # comma-separated logins; empty = every signed-in user has access
 
 
 settings = Settings()

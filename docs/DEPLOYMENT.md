@@ -7,20 +7,24 @@ Instrukcja krok po kroku. Każdy krok ma dwa warianty: **Azure Portal** (do zrzu
 | Wymaganie | Uwagi |
 |---|---|
 | Subskrypcja Azure | Np. **Azure for Students** (darmowe kredyty) |
-| Uprawnienia do tworzenia rejestracji aplikacji w Entra ID | Potrzebne w kroku 6. Na kontach uczelnianych bywa to zablokowane, patrz [Rozwiązywanie problemów](#rozwiązywanie-problemów) |
+| Konto na [GitHubie](https://github.com) | Do logowania w kroku 6. Rejestracja aplikacji w Entra ID jest na koncie uczelnianym zablokowana, patrz [DECISIONS.md](DECISIONS.md) |
 | [Docker Desktop](https://www.docker.com/products/docker-desktop/) | Do zbudowania obrazu lokalnie |
 | [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.60 lub nowsze | Plus rozszerzenie: `az extension add --name containerapp --upgrade` |
 | Kod z repozytorium | `git clone ...`, a obraz budujemy z katalogu głównego repo |
 
 **Dwie uwagi dotyczące Azure for Students:**
 - **Budowanie w chmurze (`az acr build`, ACR Tasks) jest wstrzymane dla subskrypcji z darmowymi kredytami** ([Microsoft Learn](https://learn.microsoft.com/azure/container-registry/container-registry-tasks-overview)). Dlatego obraz budujemy **lokalnie w Dockerze** i wysyłamy go do rejestru (`docker push`).
-- **Subskrypcja może dopuszczać tylko wybrane regiony.** Instrukcja używa `westeurope`. Jeśli tworzenie zasobu skończy się błędem `RequestDisallowedByPolicy` / `RequestDisallowedByAzure`, użyj regionu, w którym masz już działające zasoby. Listę dozwolonych regionów znajdziesz w portalu: **Policy → Assignments → „Allowed resource deployment regions”**.
+- **Subskrypcja dopuszcza tylko 5 regionów** (polityka „Allowed resource deployment regions”): `spaincentral`, `germanywestcentral`, `uaenorth`, `austriaeast` i `switzerlandnorth`. Regiony `westeurope` i `polandcentral` są zablokowane. Instrukcja używa **`germanywestcentral`** (Frankfurt), bo jest najbliżej Polski. Listę dozwolonych regionów sprawdzisz poleceniem:
+  ```bash
+  az policy assignment list --query "[].{nazwa:displayName, parametry:parameters}" -o json
+  ```
 
 Nazwy użyte w instrukcji (CLI w Git Bash, WSL albo Cloud Shell):
 
 ```bash
 RG=rg-sattrack
-LOCATION=westeurope
+LOCATION=germanywestcentral
+GITHUB_LOGIN=<twoj-login-github>  # kto ma dostęp do aplikacji (lista po przecinku)
 ACR=acrsattrack<twoj-sufiks>      # globalnie unikalna, tylko małe litery i cyfry
 ENV=cae-sattrack
 APP=ca-sattrack
@@ -49,7 +53,7 @@ Grupa zasobów to logiczny kontener na wszystkie elementy projektu. Po ocenie us
 **Portal:** **Resource groups → Create**, potem:
 - Subscription: Twoja subskrypcja,
 - Resource group: `rg-sattrack`,
-- Region: `West Europe`.
+- Region: `Germany West Central`.
 
 Na koniec **Review + create → Create**. 📸 1
 
@@ -65,7 +69,7 @@ Prywatne repozytorium obrazów Dockera.
 **Portal:** **Create a resource → Container Registry → Create**, potem:
 - Resource group: `rg-sattrack`,
 - Registry name: `acrsattrack<sufiks>`,
-- Location: `West Europe`,
+- Location: `Germany West Central`,
 - Pricing plan: **Basic**.
 
 Na koniec **Review + create → Create**. 📸 2
@@ -117,7 +121,7 @@ Bez dodatkowych parametrów polecenie samo tworzy obszar roboczy Log Analytics.
 1. Zakładka **Basics**:
    - Resource group: `rg-sattrack`,
    - Container app name: `ca-sattrack`,
-   - Region: `West Europe`,
+   - Region: `Germany West Central`,
    - Container Apps Environment: `cae-sattrack` (krok 4).
 
    📸 4a
@@ -126,7 +130,8 @@ Bez dodatkowych parametrów polecenie samo tworzy obszar roboczy Log Analytics.
    - Image source: **Azure Container Registry**,
    - Registry: `acrsattrack<sufiks>`, Image: `sattrack`, Image tag: `v1`,
    - Authentication type: **Managed identity**, Managed identity: **System assigned** (portal sam nada rolę `AcrPull`),
-   - CPU and Memory: **0.25 CPU cores, 0.5 Gi memory**.
+   - CPU and Memory: **0.25 CPU cores, 0.5 Gi memory**,
+   - Environment variables: Name `ALLOWED_USERS`, Source **Manual entry**, Value: Twój login z GitHuba (kilka loginów rozdziel przecinkami). Tylko te konta będą miały dostęp po zalogowaniu (krok 6).
 
    📸 4b
 3. Zakładka **Ingress**:
@@ -150,8 +155,9 @@ az containerapp create --name $APP --resource-group $RG --environment $ENV \
 az containerapp registry set --name $APP --resource-group $RG \
   --server $ACR.azurecr.io --identity system
 
-# 3) docelowy obraz i port aplikacji
-az containerapp update --name $APP --resource-group $RG --image $IMAGE
+# 3) docelowy obraz, lista dozwolonych użytkowników i port aplikacji
+az containerapp update --name $APP --resource-group $RG --image $IMAGE \
+  --set-env-vars "ALLOWED_USERS=$GITHUB_LOGIN"
 az containerapp ingress update --name $APP --resource-group $RG --target-port 8000
 
 # adres aplikacji
@@ -195,40 +201,51 @@ az containerapp update --name $APP --resource-group $RG --min-replicas 0 --max-r
 
 Przy 0 replikach pierwsze żądanie po przerwie trwa kilka sekund (zimny start). Zrzuty ekranu aplikacji rób po rozgrzaniu.
 
-## Krok 6. Logowanie przez Microsoft Entra ID (Easy Auth)
+## Krok 6. Logowanie (Easy Auth z GitHubem) i lista dozwolonych użytkowników
 
 Logowania nie ma w kodzie aplikacji. Zapewnia je platforma: niezalogowane żądanie w ogóle nie dociera do kontenera.
 
-**Portal**, wariant zalecany, bo daje najważniejsze zrzuty:
+**Dlaczego GitHub, a nie Microsoft Entra ID?** Na koncie uczelnianym nie da się utworzyć rejestracji aplikacji. `az ad app create` kończy się błędem *Insufficient privileges*, a panel Entra ID w portalu zwraca „Nie masz dostępu” (401). 📸 16. Mechanizm jest ten sam (Easy Auth), zmienia się tylko dostawca tożsamości. GitHub wpuszcza jednak każdego, kto ma konto, więc o dostępie decyduje dodatkowo lista `ALLOWED_USERS` w aplikacji (krok 5). Kto spoza listy się zaloguje, zobaczy stronę „Brak dostępu” (HTTP 403).
+
+### 6a. Aplikacja OAuth na GitHubie
+
+1. Skopiuj adres aplikacji z **Overview** (Application Url), np. `https://ca-sattrack.<...>.azurecontainerapps.io`.
+2. Na GitHubie: **Settings → Developer settings → OAuth Apps → New OAuth App**:
+   - Application name: `SatTrack`,
+   - Homepage URL: adres aplikacji,
+   - Authorization callback URL: adres aplikacji + **`/.auth/login/github/callback`**.
+3. **Register application**. Zanotuj **Client ID**, kliknij **Generate a new client secret** i zanotuj sekret (widać go tylko raz). 📸 15
+
+### 6b. Dostawca tożsamości w Container App
+
+**Portal:**
 1. Container App → **Security → Authentication → Add identity provider**.
-2. Identity provider: **Microsoft**.
-3. App registration type: **Create new app registration**, Name: `sattrack`, Supported account types: **Current tenant – Single tenant** (tylko konta organizacji).
-4. Client secret expiration: np. 180 dni.
-5. Sekcja **Container App authentication settings** (pojawia się przy pierwszym dostawcy; domyślnie przekierowuje wszystkich do logowania, a etykiety mogą się nieznacznie różnić):
+2. Identity provider: **GitHub**, wklej **Client ID** i **Client secret** z kroku 6a. Sekret zostanie zapisany jako sekret aplikacji, nie trafia do kodu.
+3. Sekcja **Container Apps authentication settings** (pojawia się przy pierwszym dostawcy, domyślnie przekierowuje wszystkich do logowania):
    - Restrict access: **Require authentication**,
-   - Unauthenticated requests: **HTTP 302 Found redirect: recommended for websites**,
-   - Token store: zaznaczony.
-6. **Add**. 📸 6
+   - Unauthenticated requests: **HTTP 302 Found redirect** (przekierowanie do logowania).
+4. **Add**. 📸 6
 
-Sprawdzenie: otwórz adres aplikacji w oknie prywatnym. Powinno pojawić się logowanie Microsoft 📸 9, a po zalogowaniu pasek górny pokaże Twoje imię i nazwisko z linkiem „Wyloguj”.
-
-**CLI** (alternatywa, wymaga utworzenia rejestracji aplikacji ręcznie):
+**CLI:**
 ```bash
-FQDN=$(az containerapp show -n $APP -g $RG --query properties.configuration.ingress.fqdn -o tsv)
-APP_ID=$(az ad app create --display-name sattrack --sign-in-audience AzureADMyOrg \
-  --web-redirect-uris "https://$FQDN/.auth/login/aad/callback" \
-  --enable-id-token-issuance true --query appId -o tsv)
-az ad sp create --id $APP_ID
-SECRET=$(az ad app credential reset --id $APP_ID --query password -o tsv)
-TENANT=$(az account show --query tenantId -o tsv)
-
-az containerapp auth microsoft update --name $APP --resource-group $RG \
-  --client-id $APP_ID --client-secret $SECRET --tenant-id $TENANT --yes
+az containerapp auth github update --name $APP --resource-group $RG \
+  --client-id <CLIENT_ID> --client-secret <CLIENT_SECRET> --yes
 az containerapp auth update --name $APP --resource-group $RG \
-  --unauthenticated-client-action RedirectToLoginPage --redirect-provider azureactivedirectory
+  --unauthenticated-client-action RedirectToLoginPage --redirect-provider github
 ```
 
-Flag polecenia `az containerapp auth update` nie ma w przewodniku Microsoft Learn. Przed użyciem sprawdź je w `az containerapp auth update --help`.
+Flagi drugiego polecenia nie są opisane w przewodniku Microsoft Learn. Przed użyciem sprawdź je w `az containerapp auth update --help`.
+
+### 6c. Sprawdzenie
+
+1. Otwórz adres aplikacji w oknie prywatnym. Pojawi się logowanie GitHuba 📸 9, a po nim SatTrack z Twoim loginem i linkiem „Wyloguj” w pasku górnym.
+2. *(opcjonalnie)* Zaloguj się innym kontem GitHub (spoza `ALLOWED_USERS`), a zobaczysz stronę „Brak dostępu”. 📸 17
+
+Strona „Brak dostępu” pokazuje login otrzymany od platformy. Jeśli zablokuje także Ciebie, wpisz dokładnie ten login do `ALLOWED_USERS`:
+- portal: **Application → Containers → Edit and deploy → Environment variables**,
+- CLI: `az containerapp update -n $APP -g $RG --set-env-vars "ALLOWED_USERS=<login>"`.
+
+**Wariant docelowy z Entra ID** (gdy dział IT udostępni rejestrację aplikacji): w kroku 6b wybierz dostawcę **Microsoft** → **Provide the details of an existing app registration** i wpisz Client ID, sekret oraz Issuer URL podane przez IT. Adres zwrotny dla IT to adres aplikacji + `/.auth/login/aad/callback`. Kod aplikacji nie wymaga zmian. Lista `ALLOWED_USERS` może wtedy zostać pusta, bo dostęp ogranicza katalog organizacji.
 
 ## Krok 7. Logi w Log Analytics
 
@@ -271,7 +288,7 @@ az containerapp update --name $APP --resource-group $RG --image $ACR.azurecr.io/
 ## Sposób dostępu użytkownika końcowego
 
 1. Pracownik otwiera adres `https://ca-sattrack.<...>.azurecontainerapps.io`.
-2. Loguje się kontem organizacji Microsoft (Entra ID).
+2. Loguje się kontem GitHub (docelowo kontem organizacji Microsoft Entra ID). Wpuszczone zostaną tylko konta z listy `ALLOWED_USERS`.
 3. Widzi mapę satelitów na żywo, widoczność GNSS w wybranym punkcie (skyplot, tabela, wykres 24 h) i przeloty ISS. 📸 10, 📸 11
 4. Wylogowuje się linkiem **Wyloguj** w prawym górnym rogu.
 
@@ -284,7 +301,7 @@ Dla działu IT dostępna jest dokumentacja API pod adresem `/docs`. 📸 12
 | Container Apps (plan Consumption) | Miesięczny darmowy limit na subskrypcję: **180 000 vCPU-s, 360 000 GiB-s i 2 mln zapytań**. Przy skalowaniu do zera i ruchu demonstracyjnym koszt jest praktycznie zerowy. |
 | Container Registry Basic | Stała opłata, ok. **0,167 USD/dzień (~5 USD/mies.)**. Aktualną cenę sprawdź w [kalkulatorze](https://azure.microsoft.com/pricing/calculator/?service=container-registry). |
 | Log Analytics | Opłata za ilość danych, przy kilku MB logów to grosze |
-| Entra ID (rejestracja aplikacji) | Bezpłatnie |
+| Logowanie (Easy Auth, GitHub OAuth App) | Bezpłatnie |
 
 Podgląd kosztów: **Cost Management → Cost analysis**, zakres `rg-sattrack`. 📸 13 (opcjonalny)
 
@@ -292,12 +309,11 @@ Podgląd kosztów: **Cost Management → Cost analysis**, zakres `rg-sattrack`. 
 
 ```bash
 az group delete --name $RG --yes --no-wait
-az ad app delete --id <APP_ID rejestracji "sattrack">   # rejestracja w Entra ID nie należy do grupy zasobów
 ```
 
-**Portal:**
-- **Resource groups → rg-sattrack → Delete resource group**,
-- **Microsoft Entra ID → App registrations → sattrack → Delete**.
+**Portal:** **Resource groups → rg-sattrack → Delete resource group**.
+
+**GitHub:** **Settings → Developer settings → OAuth Apps → SatTrack → Delete application**. Aplikacja OAuth nie należy do grupy zasobów.
 
 ## Rozwiązywanie problemów
 
@@ -307,6 +323,8 @@ az ad app delete --id <APP_ID rejestracji "sattrack">   # rejestracja w Entra ID
 | `RequestDisallowedByPolicy` przy tworzeniu zasobu | Region niedozwolony w subskrypcji. Użyj regionu dopuszczonego przez politykę (patrz wymagania wstępne). |
 | Rewizja w stanie *Failed*, w logach `unauthorized` przy pobieraniu obrazu | Brak roli `AcrPull` dla tożsamości aplikacji. Nadaj ją w rejestrze: **Access control (IAM) → Add role assignment → AcrPull →** tożsamość zarządzana `ca-sattrack`. Sprawdź też `az acr config authentication-as-arm show -r $ACR` (musi być `enabled`). |
 | `exec format error` w logach | Obraz zbudowany na procesorze ARM (np. Mac z Apple Silicon). Buduj z `--platform linux/amd64`. |
-| Błąd przy tworzeniu rejestracji aplikacji (*insufficient privileges*) | Uczelnia blokuje rejestrowanie aplikacji w swoim katalogu Entra ID. Poproś dział IT o utworzenie rejestracji i wybierz **Provide the details of an existing app registration**. |
+| Błąd przy tworzeniu rejestracji aplikacji (*insufficient privileges*), panel Entra ID „Nie masz dostępu” | Uczelnia blokuje rejestrowanie aplikacji w swoim katalogu Entra ID. Dlatego logujemy przez GitHuba (krok 6). Docelowo dział IT może utworzyć rejestrację, a wtedy wybierasz **Provide the details of an existing app registration**. |
+| Po zalogowaniu strona „Brak dostępu do SatTrack” (403) | Login nie jest na liście `ALLOWED_USERS`. Wpisz dokładnie login pokazany na tej stronie (krok 6c). |
+| Po kliknięciu „Zaloguj” w GitHubie błąd *redirect_uri mismatch* | W aplikacji OAuth na GitHubie popraw Authorization callback URL na `https://<adres-aplikacji>/.auth/login/github/callback`. |
 | Pierwsze otwarcie strony trwa kilka sekund | Zimny start po skalowaniu do zera, to normalne. |
 | Napis „Dane orbitalne: snapshot…” zamiast „(CelesTrak)” | CelesTrak był niedostępny albo zwrócił 403. Aplikacja ponowi próbę po 2 h. Szczegóły są w logach (`CelesTrak fetch failed`). |

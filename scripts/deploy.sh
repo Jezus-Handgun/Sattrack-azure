@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 # SatTrack: deployment to Azure Container Apps (CLI variant of docs/DEPLOYMENT.md, steps 0-5).
-# Authentication (step 6) is configured in the Azure Portal, see docs/DEPLOYMENT.md.
+# Sign-in (step 6: GitHub OAuth App + Easy Auth) is configured afterwards, see docs/DEPLOYMENT.md.
 #
 # Usage (from the repository root, Docker running, `az login` done):
-#   bash scripts/deploy.sh            # first deployment, tag v1
-#   TAG=v2 bash scripts/deploy.sh     # new version: rebuild, push and update the image only
+#   ACR=acrsattrack123 ALLOWED_USERS=my-github-login bash scripts/deploy.sh   # first deployment, v1
+#   TAG=v2 ACR=... ALLOWED_USERS=... bash scripts/deploy.sh                   # new version only
 #
 # WARNING: this script creates paid Azure resources (Container Registry Basic ~5 USD/month).
 set -euo pipefail
 
 # ---- parameters ----
 RG="${RG:-rg-sattrack}"
-LOCATION="${LOCATION:-westeurope}"
+LOCATION="${LOCATION:-germanywestcentral}"  # Azure for Students policy allows only a few regions
+ALLOWED_USERS="${ALLOWED_USERS:-}"         # GitHub logins with access, comma-separated (required)
 ACR="${ACR:-acrsattrackCHANGEME}"   # globally unique, lowercase letters and digits only
 ENV_NAME="${ENV_NAME:-cae-sattrack}"
 APP="${APP:-ca-sattrack}"
@@ -20,6 +21,11 @@ TAG="${TAG:-v1}"
 
 if [[ "$ACR" == *CHANGEME* ]]; then
   echo "Set a unique registry name first, e.g.: ACR=acrsattrack123 bash scripts/deploy.sh" >&2
+  exit 1
+fi
+if [[ -z "$ALLOWED_USERS" ]]; then
+  # GitHub sign-in admits any GitHub account, so an empty allow-list would open the app to everyone.
+  echo "Set who may use the app, e.g.: ALLOWED_USERS=my-github-login ACR=... bash scripts/deploy.sh" >&2
   exit 1
 fi
 
@@ -34,7 +40,8 @@ if az containerapp show -n "$APP" -g "$RG" >/dev/null 2>&1; then
   az acr login --name "$ACR"
   docker build --platform linux/amd64 -t "$IMAGE" .
   docker push "$IMAGE"
-  az containerapp update -n "$APP" -g "$RG" --image "$IMAGE" -o none
+  az containerapp update -n "$APP" -g "$RG" --image "$IMAGE" \
+    --set-env-vars "ALLOWED_USERS=$ALLOWED_USERS" -o none
 else
   step "Resource providers"
   for ns in Microsoft.App Microsoft.OperationalInsights Microsoft.ContainerRegistry; do
@@ -61,7 +68,8 @@ else
     --target-port 80 --ingress external \
     --cpu 0.25 --memory 0.5Gi --min-replicas 0 --max-replicas 2 -o none
   az containerapp registry set -n "$APP" -g "$RG" --server "$ACR.azurecr.io" --identity system -o none
-  az containerapp update -n "$APP" -g "$RG" --image "$IMAGE" -o none
+  az containerapp update -n "$APP" -g "$RG" --image "$IMAGE" \
+    --set-env-vars "ALLOWED_USERS=$ALLOWED_USERS" -o none
   az containerapp ingress update -n "$APP" -g "$RG" --target-port 8000 -o none
 fi
 

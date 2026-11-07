@@ -1,7 +1,9 @@
 """Read the signed-in user from headers injected by Container Apps authentication (Easy Auth).
 
-Login itself is done by the platform; the app never sees credentials or tokens. The identity is
-used for display only (no access decisions), so a spoofed header locally changes nothing.
+Login itself is done by the platform; the app never sees credentials or tokens. The login is also
+checked against the optional ALLOWED_USERS allow-list (authorization on top of authentication).
+That is safe because Container Apps doesn't let external requests set X-MS-* headers; locally
+there is no auth at all, so a hand-made header proves nothing there either way.
 """
 
 import base64
@@ -19,6 +21,12 @@ def current_user(request: Request) -> dict:
         "login": login,
         "mode": "azure",
     }
+
+
+def is_allowed(login: str | None, allowed_users: str) -> bool:
+    """Allow-list check. No login = request didn't pass Easy Auth (local run, platform probe)."""
+    allowed = {u.strip().lower() for u in allowed_users.split(",") if u.strip()}
+    return not allowed or login is None or login.lower() in allowed
 
 
 def _claim_name(principal: str | None) -> str | None:
