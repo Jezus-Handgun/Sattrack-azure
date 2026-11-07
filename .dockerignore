@@ -1,0 +1,9 @@
+# Allow-list: only what the image needs goes into the build context
+# (keeps out tests, docs, .venv, .git, .env and CLAUDE.md).
+*
+!app/
+!data/snapshot/
+!pyproject.toml
+!uv.lock
+!.python-version
+**/__pycache__
