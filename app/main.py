@@ -1,17 +1,30 @@
+import logging
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.config import settings
 from app.routers import satellites, system, visibility
 from app.tle_store import store
+
+# stdout is collected by Container Apps into Log Analytics (ContainerAppConsoleLogs_CL).
+logging.basicConfig(
+    level=settings.log_level.upper(),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    stream=sys.stdout,
+)
+log = logging.getLogger("app")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    log.info("SatTrack starting (TLE TTL %d s, cache dir %s)", store.ttl, store.cache_dir)
     store.load_initial()  # snapshot/cache from disk only; CelesTrak is hit lazily on first request
     yield
+    log.info("SatTrack stopping")
 
 
 app = FastAPI(

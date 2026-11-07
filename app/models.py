@@ -4,6 +4,12 @@ from typing import Literal
 from pydantic import BaseModel
 
 
+class UserInfo(BaseModel):
+    name: str | None  # full name if Entra ID provides it, else the login
+    login: str | None
+    mode: Literal["local", "azure"]
+
+
 class GroupInfo(BaseModel):
     key: str
     label: str
