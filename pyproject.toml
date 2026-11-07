@@ -11,18 +11,15 @@ dependencies = [
     "pydantic-settings==2.16.2",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest==9.2.0",
     "ruff==0.17.4",
 ]
 
-[build-system]
-requires = ["setuptools>=70"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools.packages.find]
-include = ["app*"]
+[tool.uv]
+# The app runs from the repo root (uvicorn app.main:app), so it is not built as a package.
+package = false
 
 [tool.ruff]
 line-length = 100
@@ -33,3 +30,4 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]

@@ -4,17 +4,17 @@ Wewnętrzna aplikacja webowa dla geodetów: pokazuje, ile satelitów GNSS (GPS, 
 
 ## Uruchomienie lokalne
 
-Wymagany Python 3.12.
+Wymagany [uv](https://docs.astral.sh/uv/) (sam pobierze Pythona 3.12, jeśli go brakuje).
 
 ```bash
-python -m venv .venv && .venv\Scripts\activate    # Linux/macOS: source .venv/bin/activate
-pip install -e ".[dev]"
-uvicorn app.main:app --reload
+git clone <adres-repozytorium> && cd sattrack-azure
+uv sync
+uv run uvicorn app.main:app --reload
 ```
 
 Aplikacja: <http://localhost:8000>, dokumentacja API: <http://localhost:8000/docs>
 
-Testy i lint: `pytest` oraz `ruff check . && ruff format --check .`
+Testy i lint: `uv run pytest` oraz `uv run ruff check . && uv run ruff format --check .`
 
 ## Dokumentacja
 
