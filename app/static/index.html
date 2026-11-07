@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SatTrack – planowanie pomiarów GNSS</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="-16 -16 32 32" aria-hidden="true">
+        <g transform="rotate(-35)">
+          <rect x="-4" y="-5" width="8" height="10" rx="1.5" fill="#e2e8f0"/>
+          <rect x="-15" y="-3.5" width="9" height="7" fill="#60a5fa"/>
+          <rect x="6" y="-3.5" width="9" height="7" fill="#60a5fa"/>
+          <line x1="-6" y1="0" x2="-4" y2="0" stroke="#e2e8f0" stroke-width="1.5"/>
+          <line x1="4" y1="0" x2="6" y2="0" stroke="#e2e8f0" stroke-width="1.5"/>
+        </g>
+      </svg>
+      <div>
+        <h1>SatTrack</h1>
+        <p>Planowanie pomiarów GNSS</p>
+      </div>
+    </div>
+    <div class="user">
+      <span id="user-name">…</span>
+      <a id="logout" href="/.auth/logout" hidden>Wyloguj</a>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="card map-card">
+      <div class="card-head">
+        <h2>Mapa na żywo</h2>
+        <label>Grupa
+          <select id="group"></select>
+        </label>
+        <span id="data-age" class="muted"></span>
+      </div>
+      <div class="map-wrap">
+        <div id="map"></div>
+        <aside id="sat-panel" class="sat-panel" hidden>
+          <button id="sat-close" class="close" aria-label="Zamknij">×</button>
+          <h3 id="sat-name"></h3>
+          <dl>
+            <dt>NORAD ID</dt><dd id="sat-norad"></dd>
+            <dt>Wysokość</dt><dd id="sat-alt"></dd>
+            <dt>Prędkość</dt><dd id="sat-speed"></dd>
+            <dt>Pozycja</dt><dd id="sat-pos"></dd>
+          </dl>
+          <p class="muted small">Linia: ślad orbity ±45 min</p>
+        </aside>
+      </div>
+      <p class="muted small hint">Kliknij satelitę, aby zobaczyć szczegóły. Kliknij w dowolne miejsce mapy, aby ustawić punkt pomiaru.</p>
+    </section>
+
+    <section class="card side-card">
+      <div class="card-head">
+        <h2>Widoczność GNSS w punkcie</h2>
+      </div>
+      <form id="point-form" class="point-form">
+        <label>Szer. [°]<input id="lat" type="number" step="0.0001" min="-90" max="90" required></label>
+        <label>Dł. [°]<input id="lon" type="number" step="0.0001" min="-180" max="180" required></label>
+        <button type="submit">Sprawdź</button>
+      </form>
+      <div id="counts" class="counts"></div>
+      <div class="skyplot-wrap">
+        <svg id="skyplot" viewBox="-120 -120 240 240" role="img" aria-label="Skyplot: położenie satelitów na niebie"></svg>
+      </div>
+      <p id="visible-time" class="muted small center"></p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Satelita</th><th>System</th><th>Elewacja</th><th>Azymut</th></tr></thead>
+          <tbody id="visible-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card chart-card">
+      <div class="card-head">
+        <h2>Liczba widocznych satelitów – najbliższe 24 h</h2>
+        <span class="muted small">maska elewacji <span class="mask-value"></span>, czas lokalny</span>
+      </div>
+      <div class="chart-wrap"><canvas id="timeline"></canvas></div>
+    </section>
+
+    <section class="card passes-card">
+      <div class="card-head">
+        <h2>Przeloty ISS – najbliższe 48 h</h2>
+        <span class="muted small">elewacja ≥ <span class="mask-value"></span></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Dzień</th><th>Wschód</th><th>Kulminacja</th><th>Maks. elewacja</th><th>Zachód</th></tr></thead>
+          <tbody id="passes-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"
+          integrity="sha384-vsrfeLOOY6KuIYKDlmVH5UiBmgIdB1oEf7p01YgWHuqmOHfZr374+odEv96n9tNC" crossorigin="anonymous"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
