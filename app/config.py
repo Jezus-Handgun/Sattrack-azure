@@ -10,7 +10,6 @@ class Settings(BaseSettings):
     default_lon: float = 18.95
     min_elevation_deg: float = 10.0
     log_level: str = "INFO"
-    applicationinsights_connection_string: str | None = None
 
 
 settings = Settings()
