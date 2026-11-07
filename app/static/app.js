@@ -2,12 +2,12 @@
 
 // One colour per constellation, used on the map, skyplot, chips, table and chart.
 const COLORS = {
-  gps: "#2563eb",
-  galileo: "#f59e0b",
-  glonass: "#dc2626",
-  beidou: "#16a34a",
-  stations: "#7c3aed",
-  total: "#111827",
+  gps: "#3b82f6",
+  galileo: "#fbbf24",
+  glonass: "#f87171",
+  beidou: "#4ade80",
+  stations: "#c084fc",
+  total: "#f1f5f9",
 };
 const NAMES = { gps: "GPS", galileo: "Galileo", glonass: "GLONASS", beidou: "BeiDou", total: "Razem" };
 const GNSS = ["gps", "galileo", "glonass", "beidou"];
@@ -75,8 +75,10 @@ async function loadUser() {
 // ---------- live map ----------
 
 const map = L.map("map", { worldCopyJump: true, minZoom: 2, preferCanvas: true }).setView([35, 15], 2);
+// Standard OSM tiles; darkened with a CSS filter (.dark-tiles) because dark tile services need API keys.
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 12,
+  className: "dark-tiles",
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
 }).addTo(map);
 
@@ -88,7 +90,7 @@ function markerStyle(norad) {
   const selected = norad === state.selected;
   return {
     radius: selected ? 9 : 6,
-    color: selected ? "#111827" : "#ffffff",
+    color: selected ? "#ffffff" : "#0a0f1c",
     weight: selected ? 3 : 1.5,
     fillColor: COLORS[state.group],
     fillOpacity: 0.95,
@@ -252,6 +254,8 @@ function showTimeline(data) {
     state.chart.update();
     return;
   }
+  Chart.defaults.color = "#94a3b8"; // axis labels and legend
+  Chart.defaults.borderColor = "#243049"; // grid lines
   state.chart = new Chart($("timeline"), {
     type: "line",
     data: { labels, datasets },
